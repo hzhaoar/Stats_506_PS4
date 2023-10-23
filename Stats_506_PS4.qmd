@@ -1,0 +1,363 @@
+---
+title: "Stats_506_PS4"
+format: pdf
+editor: visual
+---
+
+## Problem 1
+
+```{r,echo=FALSE}
+library(tidyverse)
+```
+
+```{r}
+library(nycflights13)
+```
+
+```{r}
+data("airlines")
+data("airports")
+data("flights")
+data("planes")
+data("weather")
+```
+
+### Task (a)
+
+```{r}
+departure_delays <- flights %>%
+  left_join(airports, by = c("origin" = "faa")) %>%
+  group_by(name) %>%
+  filter(n() >= 10) %>%
+  summarise(mean_dep_delay = mean(dep_delay, na.rm = TRUE),
+            median_dep_delay = median(dep_delay, na.rm = TRUE)) %>%
+  arrange(desc(mean_dep_delay))
+
+departure_delays
+```
+
+```{r}
+arrival_delays <- flights %>%
+  left_join(airports, by = c("dest" = "faa")) %>%
+  group_by(name) %>%
+  filter(n() >= 10) %>%
+  summarise(mean_arr_delay = mean(arr_delay, na.rm = TRUE),
+            median_arr_delay = median(arr_delay, na.rm = TRUE)) %>%
+  arrange(desc(mean_arr_delay))
+
+arrival_delays
+```
+
+### Task (b)
+
+```{r}
+flight_speeds <- flights %>%
+  right_join(planes, by = "tailnum") %>%
+  group_by(model) %>%
+  summarise(avg_speed_mph = mean(speed, na.rm = TRUE),
+            num_flights = n()) %>%
+  filter(avg_speed_mph == max(avg_speed_mph, na.rm = TRUE))
+flight_speeds
+```
+
+## Problem 2
+
+```{r,echo=FALSE}
+nnmaps <- readr::read_delim("./chicago-nmmaps.csv")
+```
+
+```{r}
+#' Function to find the average temperature of given time
+#'
+#' @param month a numeric value
+#' @param year a numeric value
+#' @param data input data, which should be in tibble format
+#' @celsius a boolean value
+#' @average_fn a function object, mean by default
+#' @return The z-score for `x`
+get_temp<- function(month, year, data, celsius = FALSE, average_fn = mean){
+  
+  # Check for invalid year
+  if (!is.numeric(year)){
+    return("Invalid year. Please provide numeric year")
+  }
+  
+  # Process for month of type "character"
+  if (is.character(month)){
+    
+    # Convert month into abbreviation if possible
+    month_names <- c("January", "February", "March", "April", 
+                     "May", "June", "July", "August", "September", 
+                     "October", "November", "December")
+    month_abbrs <- c("Jan", "Feb", "Mar", "Apr", 
+                     "May", "Jun", "Jul", "Aug", 
+                     "Sep", "Oct", "Nov", "Dec")
+    if (month %in% month_names){
+      month <- month_abbrs[match(month, month_names)]
+    }
+    
+    # Filter the data by month abbreviations
+    if (month %in% month_abbrs){
+      filtered_data <- data %>%
+        filter(month == !!month,
+               year == !!year)
+    
+    # Case for the input is characters but not a valid month name
+    } else {
+      return("Invalid month. Please provide a valid month name.")
+    }
+    
+  # Process for month of type "numeric"
+  } else if (is.numeric(month)){
+    
+    # Valid numeric month input
+    if (month %in% (1:12)){
+      filtered_data <- data %>%
+        filter(month_numeric == !!month,
+               year == !!year)
+      
+    # Invalid numeric month input. Example: 13
+    } else {
+      return("Invalid month. Please provide a numeric month (1-12).")
+    }
+    
+  # Non-numeric or non-character input
+  } else {
+    return("Invalid month. Please provide a name or a number")
+  }
+  
+  # No data matching input month and year
+  if (nrow(filtered_data) == 0){
+    return("No data matched")
+  }
+  
+  # Calculate the mean using given mean function
+  avg_temperature <- filtered_data %>%
+    summarize(
+      average = average_fn(temp)
+    ) %>%
+    pull(average) 
+  
+  # Convert Celsius into Fahrenheit if needed
+  if (celsius) {
+    avg_temperature <- (avg_temperature-32)*5/9
+  }
+  
+  return(avg_temperature)
+}
+```
+
+We can prove our code works by evaluating the following.
+
+### Test 1
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps)
+```
+
+### Test 2
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+```
+
+### Test 3
+
+```{r}
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+```
+
+### Test 4
+
+```{r}
+get_temp(13, 1998, data = nnmaps)
+```
+
+### Test 5
+
+```{r}
+get_temp(2, 2005, data = nnmaps)
+```
+
+### Test 6
+
+```{r}
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+
+
+## Problem 4
+
+### Task (b)
+
+First, we load the data into SAS.
+
+```{r,eval=FALSE}
+%let in_path = ~/HW/PS4_p4/dataset;
+%let out_path = ~/HW/PS4_p4/output_files;
+
+libname in_lib "&in_path.";
+libname out_lib "&out_path.";
+
+/* Create the "public_data" dataset using PROC SQL */
+proc sql;
+  create table out_lib.public_data as
+  select
+    B3 as fin_cf,
+    ND2 as thi_dis,
+    B7_b as rate_econ,
+    GH1 as have_house,
+    ppeducat as edu,
+    race_5cat as race,
+    weight_pop as weight,
+    caseID
+  from in_lib.public2022;
+quit;
+```
+
+### Task (c)
+
+Now, we need to export the data as a `.csv` file after which we can load this file into `stata`.
+
+```{r,eval=FALSE}
+proc export data=out_lib.public_data
+  outfile="&out_path./public_data.csv"
+  dbms=csv replace;
+  delimiter = ",";
+run;
+```
+
+Then, we can load it into `stata` using the following command.
+
+```{r,eval=FALSE}
+import delimited using "C:\Users\hzhaoar\Downloads\public_data.csv", clear
+```
+
+### Task (d)
+
+```{r,eval=FALSE}
+count
+```
+
+The output in `stata` is 11,667. In the code-book, the 8 variables that I chose have the property `Missing .: 0/11,667`, which means that there is no missing data. Therefore, data is successfully extracted till this step.
+
+### Task (e)
+
+In this task, we will convert the two variables which are in Likert scale to two binary variables.
+
+```{r,eval=FALSE}
+gen worse_fin_cf = (fin_cf == 1) | (fin_cf == 2)
+gen higher_thi_dis = (thi_dis == 1) | (thi_dis == 2)
+```
+
+### Task (f)
+
+We use the following code to tell `Stata` that the data is from a complex sample
+
+```{r,eval=FALSE}
+svyset caseid [pw=weight]
+```
+
+Then, we can carry out the logistic model. From the code-book, we can know that all predictors are categorical variables.
+
+```{r,eval=FALSE}
+svy: logit worse_fin_cf i.higher_thi_dis i.rate_econ i.have_house i.edu i.race
+```
+
+Here is the result.
+
+```{r,eval=FALSE}
+Survey: Logistic regression
+
+Number of strata =      1                        Number of obs   =      11,667
+Number of PSUs   = 11,667                        Population size = 255,114,223
+                                                 Design df       =      11,666
+                                                 F(14, 11653)    =       68.37
+                                                 Prob > F        =      0.0000
+
+-------------------------------------------------------------------------------
+              |             Linearized
+ worse_fin_cf | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------+----------------------------------------------------------------
+1.higher_th~s |   .0148348   .0494406     0.30   0.764    -.0820771    .1117466
+              |
+    rate_econ |
+           2  |  -1.110024   .0487947   -22.75   0.000     -1.20567   -1.014378
+           3  |  -1.808187   .0796735   -22.69   0.000    -1.964361   -1.652014
+           4  |  -2.473934   .3467046    -7.14   0.000    -3.153533   -1.794335
+              |
+   have_house |
+           2  |   .0711845   .0563518     1.26   0.207    -.0392744    .1816434
+           3  |  -.0215269   .0586194    -0.37   0.713    -.1364308    .0933769
+           4  |   -.348212   .0993839    -3.50   0.000    -.5430211   -.1534029
+              |
+          edu |
+           2  |  -.0789397   .1036429    -0.76   0.446    -.2820972    .1242177
+           3  |  -.1077575   .1008401    -1.07   0.285     -.305421    .0899061
+           4  |  -.2286458   .0996236    -2.30   0.022    -.4239247   -.0333669
+              |
+         race |
+           2  |  -.7122881   .0809672    -8.80   0.000    -.8709973   -.5535788
+           3  |  -.1663969   .0710839    -2.34   0.019    -.3057333   -.0270605
+           4  |  -.4589166   .1259744    -3.64   0.000    -.7058474   -.2119857
+           5  |   .0214011   .1646227     0.13   0.897    -.3012869    .3440892
+              |
+        _cons |   .4143501   .1040557     3.98   0.000     .2103835    .6183167
+------------------------------------------------------------------------------
+
+```
+
+We can observe from this table that the p-value for the variable `higher_thi_dis` is 0.764, which is not significant. So, we will not reject the null-hypothesis, which means there is no strong linear relationship between this predictor and the response.
+
+Therefore, our conclusion is that the respondent's family is better off, the same, or worse off finanicially compared to 12 month's ago can NOT be predicted by thinking that the chance of experiencing a natural disaster or severe weather event will be higher, lower or about the same in 5 years.
+
+### Task (g)
+
+In this task, we can save the data modified by `stata` to another `.csv` file.
+
+```{r,eval=FALSE}
+export delimited using "C:\Users\hzhaoar\Downloads\public_data_stata.csv", replace
+```
+
+Then, we can load it into `R`.
+
+```{r}
+pubilc_data <- read.csv("./public_data_stata.csv")
+```
+
+### Task (h)
+
+```{r, echo=FALSE}
+library(survey)
+```
+
+```{r}
+# Set up the complex survey design
+design <- svydesign(id = ~ caseid, weight = ~ weight, data = pubilc_data)
+```
+
+```{r}
+# Convert variables into categorical
+pubilc_data$higher_thi_dis <- factor(pubilc_data$higher_thi_dis)
+pubilc_data$rate_econ <- factor(pubilc_data$rate_econ)
+pubilc_data$have_house <- factor(pubilc_data$have_house)
+pubilc_data$edu <- factor(pubilc_data$edu)
+pubilc_data$race <- factor(pubilc_data$race)
+```
+
+```{r}
+# Fit the model
+model <- svyglm(worse_fin_cf ~ higher_thi_dis + rate_econ + have_house + edu + race,
+                design = design, family = quasibinomial(link = "logit"))
+```
+
+```{r}
+# Find the pseudo r-squared
+psrsq(model)
+```
+
