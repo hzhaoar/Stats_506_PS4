@@ -6,7 +6,7 @@ editor: visual
 
 ## Problem 1
 
-```{r,echo=FALSE}
+```{r,results="none"}
 library(tidyverse)
 ```
 
@@ -62,7 +62,7 @@ flight_speeds
 
 ## Problem 2
 
-```{r,echo=FALSE}
+```{r,results="none"}
 nnmaps <- readr::read_delim("./chicago-nmmaps.csv")
 ```
 
@@ -189,7 +189,165 @@ get_temp("November", 1999, data =nnmaps, celsius = TRUE,
          })
 ```
 
+## Problem 3
 
+The outputs of this problem are in the folder `SAS_outputs` of the GitHub repository.
+
+### Task (a)
+
+```{r,eval=FALSE}
+%let in_path = ~/HW/PS4_p3/dataset;
+%let out_path = ~/HW/PS4_p3/output_data; 
+libname in_lib "&in_path."; 
+libname out_lib "&out_path.";
+
+/* Load data*/
+data recs;
+ set in_lib.recs2020_public_v5;
+ keep state_name nweight;
+run; 
+
+/* Aggregate by group */
+proc summary data=recs;
+  class state_name;
+  var nweight;
+  output out=out_lib.AllStatesSummary 
+  	sum=nweight_sum;
+run;
+
+/* Create a new table to save the macro */
+/* Actually, no need to sort here */
+proc sort
+  data=out_lib.AllStatesSummary
+  out=out_lib.AllStatesSummary_sorted; 
+  by descending nweight_sum; 
+run;
+
+/* Obtain the total weight*/
+data out_lib.AllStatesSummary_sorted;
+   set out_lib.AllStatesSummary_sorted; 
+   if _type_ = 0; /* Row recording the total weight */
+   call symputx('my_sum', nweight_sum); /* save it to a macro */
+run;
+
+/* Calculate the weight percentage for all states */
+data out_lib.AllStatesPercentage;
+   set out_lib.AllStatesSummary;
+   percentage = nweight_sum * 100 / &my_sum;
+   drop _freq_;
+   drop _type_;
+   output;
+run;
+
+/* Find the state with highest weight */
+proc sort
+  data=out_lib.AllStatesPercentage
+  out=out_lib.AllStatesPercentage; 
+  by descending nweight_sum; 
+run;
+
+proc print data=out_lib.AllStatesPercentage(obs=5);
+run;
+
+/* Presenting result for michigan */
+data out_lib.michigan_percentage;
+	set out_lib.AllStatesPercentage;
+	where state_name = "Michigan";
+	output;
+run;
+
+proc print data=out_lib.michigan_percentage;
+run;
+
+```
+
+From the output of `SAS`, we can see California has the highest percentage (10.670%) of records. 
+
+And of all records, 3.17247% observations correspond to Michigan.
+
+### Task (b)
+
+```{r,eval=FALSE}
+data recs;
+  set in_lib.recs2020_public_v5;
+  keep state_name nweight DOLLAREL;
+run;
+
+/* Create a histogram of the total electricity cost for strictly positive costs */
+proc univariate data=recs noprint;
+  where DOLLAREL > 0; /* Filter for strictly positive costs */
+  var DOLLAREL;
+  histogram DOLLAREL;
+  ods select Histogram;
+run;
+```
+
+This generates the histogram we want.
+
+### Task (c)
+
+```{r,eval=FALSE}
+data recs;
+  set in_lib.recs2020_public_v5;
+  keep state_name nweight DOLLAREL;
+run;
+
+data recs_log;
+  set recs;
+  where DOLLAREL > 0; /* Filter for strictly positive costs */
+  log_cost = log(DOLLAREL); 
+run;
+
+/* Create a histogram of the natural log of the total electricity cost */
+proc univariate data=recs_log noprint;
+  var log_cost;
+  histogram log_cost; /* Use the transformed variable */
+  ods select Histogram;
+run;
+```
+
+In this chunk of code, we first carry out the log transformation on the variable `DOLLAREL`, after which we save it to another variable. And finally, we obtain the histogram of transformed data.
+
+### Task (d)
+
+```{r, eval=FALSE}
+data out_lib.recs_filtered;
+	set in_lib.recs2020_public_v5;
+	keep state_name nweight DOLLAREL TOTROOMS PRKGPLC1; 
+	where PRKGPLC1 ne -2; /* remove N.A. data */
+run;
+
+data out_lib.recs_log;
+ 	set out_lib.recs_filtered;
+	where DOLLAREL > 0; /* Filter for strictly positive costs */
+	log_cost = log(DOLLAREL); 
+run;
+
+proc glm data=out_lib.recs_log;
+	class PRKGPLC1;
+	model log_cost = PRKGPLC1 TOTROOMS;
+	weight nweight;
+	output out=out_lib.ModelParameters p=Predicted_log;
+run;
+```
+
+First, we remove the observations with invalid `PRKGPLC1` and `DOLLAREL = 0`.Them, by `proc glm`, we can obtain the weighted linear model.
+
+### Task (e)
+
+```{r,eval=FALSE}
+data out_lib.ModelParameters;
+	set out_lib.ModelParameters;
+	predicted = exp(Predicted_log);
+run;
+
+proc sgplot data=out_lib.ModelParameters;
+	scatter x=DOLLAREL y=predicted; 
+	title "Scatterplot of predicted vs DOLLAREL";
+run;
+```
+
+In this task, we create a new variable to contain the value of predicted values and the the value after `exp` transformation. Then, we call `proc sgplot` to obtain the scatter plot.
 
 ## Problem 4
 
@@ -332,7 +490,9 @@ pubilc_data <- read.csv("./public_data_stata.csv")
 
 ### Task (h)
 
-```{r, echo=FALSE}
+In this task, we choose to refit the model using `R` using package `survey`.
+
+```{r, results="none"}
 library(survey)
 ```
 
@@ -361,3 +521,4 @@ model <- svyglm(worse_fin_cf ~ higher_thi_dis + rate_econ + have_house + edu + r
 psrsq(model)
 ```
 
+We can see the pseudo r-squared is quite small, which means the model is not so reliable and we should include other variables in this survey.
