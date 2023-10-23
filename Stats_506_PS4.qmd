@@ -4,6 +4,8 @@ format: pdf
 editor: visual
 ---
 
+The Github link to this problem set is: https://github.com/hzhaoar/Stats_506_PS4
+
 ## Problem 1
 
 ```{r,results="none"}
